@@ -9,8 +9,8 @@ public interface LockedChunkOverlayConfig extends Config
 {
     @ConfigItem(
         keyName = "darknessLevel",
-        name = "Forbidden chunk darkness",
-        description = "How dark forbidden chunks render (tint to black)",
+        name = "Overlay darkness",
+        description = "How dark forbidden chunks are rendered",
         position = 0
     )
     default DarknessLevel darknessLevel()
@@ -37,7 +37,7 @@ public interface LockedChunkOverlayConfig extends Config
     )
     default boolean screenFade()
     {
-        return true;
+        return false;
     }
 
 	@ConfigItem(
@@ -71,5 +71,27 @@ public interface LockedChunkOverlayConfig extends Config
 	default boolean debugText()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = "useManualChunks",
+		name = "Use manual enabled chunks",
+		description = "Enable manual list of allowed chunk region IDs (CSV)",
+		position = 6
+	)
+	default boolean useManualChunks()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "manualChunksCsv",
+		name = "Manual chunk IDs (commaseparated)",
+		description = "Manually specified allowed chunks",
+		position = 7
+	)
+	default String manualChunksCsv()
+	{
+		return "";
 	}
 }

@@ -121,6 +121,11 @@ public void onConfigChanged(ConfigChanged event)
         // Also reset countdown overlay state
         blackoutOverlay.setState(0, false);
     }
+		// Refresh regions when manual list toggled/edited
+		if ("useManualChunks".equals(event.getKey()) || "manualChunksCsv".equals(event.getKey()))
+		{
+			updateForbiddenRegionsFromLoadedRegions();
+		}
 }
 
 private void addLocalInstance(Set<WorldPoint> out, WorldPoint wp)
@@ -185,7 +190,16 @@ private void updateForbiddenRegionsFromLoadedRegions()
 		return;
 	}
 
-	String csv = configManager.getConfiguration("regionlocker", "unlockedRegions");
+	// Choose source of unlocked regions: manual config when enabled, else Region Locker config
+	String csv;
+	if (config.useManualChunks())
+	{
+		csv = config.manualChunksCsv();
+	}
+	else
+	{
+		csv = configManager.getConfiguration("regionlocker", "unlockedRegions");
+	}
 	List<String> unlocked = (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
 	boolean hasList = !unlocked.isEmpty();
 
@@ -294,9 +308,18 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
             lastRegionsRefreshMs = now;
         }
 
-		int regionId = worldPoint.getRegionID();
-		String csv = configManager.getConfiguration("regionlocker", "unlockedRegions");
-		List<String> unlocked = (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
+	int regionId = worldPoint.getRegionID();
+	// Choose source of unlocked regions: manual config when enabled, else Region Locker config
+	String csv;
+	if (config.useManualChunks())
+	{
+		csv = config.manualChunksCsv();
+	}
+	else
+	{
+		csv = configManager.getConfiguration("regionlocker", "unlockedRegions");
+	}
+	List<String> unlocked = (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
         boolean hasList = unlocked != null && !unlocked.isEmpty();
         boolean isUnlocked = !hasList || unlocked.contains(Integer.toString(regionId));
         if (!isWithinMainland(worldPoint))
