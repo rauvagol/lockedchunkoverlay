@@ -8,21 +8,43 @@ import net.runelite.client.config.ConfigItem;
 public interface LockedChunkOverlayConfig extends Config
 {
     @ConfigItem(
-		keyName = "screenFade",
-		name = "Darken Screen",
-        description = "Fade Screen to black when entering a locked chunk",
+        keyName = "darknessLevel",
+        name = "Forbidden chunk darkness",
+        description = "How dark forbidden chunks render (tint to black)",
         position = 0
-	)
-	default boolean screenFade()
-	{
-		return true;
-	}
+    )
+    default DarknessLevel darknessLevel()
+    {
+        return DarknessLevel.VERY_DARK;
+    }
+
+    @ConfigItem(
+        keyName = "fillChunks",
+        name = "Fill chunks",
+        description = "Fill the interior of forbidden chunks (unchecked: borders only)",
+        position = 1
+    )
+    default boolean fillChunks()
+    {
+        return true;
+    }
+
+    @ConfigItem(
+        keyName = "screenFade",
+        name = "Darken Screen",
+        description = "Fade Screen to black when entering a locked chunk",
+        position = 2
+    )
+    default boolean screenFade()
+    {
+        return true;
+    }
 
 	@ConfigItem(
 		keyName = "opaqueAfterFive",
 		name = "Completely cover screen",
         description = "Opaque overlay after 5 seconds in a locked chunk",
-        position = 1
+        position = 3
 	)
 	default boolean opaqueAfterFive()
 	{
@@ -33,7 +55,7 @@ public interface LockedChunkOverlayConfig extends Config
 		keyName = "fadeWarningSound",
 		name = "Warning Sound",
         description = "Play an awful warning sound while the screen is fading",
-        position = 2
+        position = 4
 	)
 	default boolean fadeWarningSound()
 	{
@@ -44,7 +66,7 @@ public interface LockedChunkOverlayConfig extends Config
 		keyName = "debugText",
 		name = "Debug Text",
         description = "Show debug text in chat/overlay",
-        position = 3
+        position = 5
 	)
 	default boolean debugText()
 	{

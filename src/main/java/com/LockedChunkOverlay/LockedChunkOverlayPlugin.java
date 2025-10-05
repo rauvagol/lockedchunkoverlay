@@ -19,6 +19,8 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.util.Text;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.api.events.WidgetClosed;
+import net.runelite.api.widgets.WidgetID;
 
 import java.util.Collections;
 import java.util.List;
@@ -93,6 +95,15 @@ private void printForbidden(String dir, WorldPoint wp)
                 " permitted=false border=(" + baseX + "," + baseY + ")-(" + maxX + "," + maxY + ")",
             null
         );
+    }
+}
+
+@Subscribe
+public void onWidgetClosed(WidgetClosed event)
+{
+    if (event.getGroupId() == WidgetID.WORLD_MAP_GROUP_ID)
+    {
+        updateForbiddenRegionsFromLoadedRegions();
     }
 }
 
