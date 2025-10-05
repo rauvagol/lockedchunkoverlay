@@ -86,7 +86,7 @@ public interface LockedChunkOverlayConfig extends Config
 
 	@ConfigItem(
 		keyName = "manualChunksCsv",
-		name = "Manual chunk IDs (commaseparated)",
+		name = "Manual chunk IDs (comma separated)",
 		description = "Manually specified allowed chunks",
 		position = 7
 	)
