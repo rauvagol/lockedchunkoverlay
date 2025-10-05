@@ -1,4 +1,4 @@
-package com.example;
+package com.LockedChunkOverlay;
 
 import net.runelite.api.Client;
 import net.runelite.api.coords.LocalPoint;
@@ -15,7 +15,6 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.Polygon;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 

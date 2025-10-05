@@ -1,4 +1,4 @@
-package com.example;
+package com.LockedChunkOverlay;
 
 import net.runelite.api.Client;
 import net.runelite.client.ui.overlay.Overlay;

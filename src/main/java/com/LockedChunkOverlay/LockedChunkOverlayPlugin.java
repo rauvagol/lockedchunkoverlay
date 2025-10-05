@@ -1,4 +1,4 @@
-package com.example;
+package com.LockedChunkOverlay;
 
 import com.google.inject.Provides;
 import javax.inject.Inject;
@@ -26,15 +26,15 @@ import java.util.Set;
 
 @Slf4j
 @PluginDescriptor(
-	name = "Example"
+	name = "Locked Chunk Overlay"
 )
-public class ExamplePlugin extends Plugin
+public class LockedChunkOverlayPlugin extends Plugin
 {
 	@Inject
 	private Client client;
 
 	@Inject
-	private ExampleConfig config;
+	private LockedChunkOverlayConfig config;
 
 	@Inject
 	private ConfigManager configManager;
@@ -58,20 +58,22 @@ public class ExamplePlugin extends Plugin
 	private static final int RECT_WIDTH = 201; // tiles, perpendicular to direction
 	private static final int RECT_LENGTH = 101; // tiles, along the direction
 	private static final int WARNING_DISTANCE = 20; // tiles, warning distance from forbidden chunk border
+    private long lastRegionsRefreshMs;
 
 	@Override
 	protected void startUp() throws Exception
 	{
-		log.info("Example started!");
+		log.info("Locked Chunk Overlay started!");
 		overlayManager.add(forbiddenTileOverlay);
 	}
 
 	@Override
 	protected void shutDown() throws Exception
 	{
-		log.info("Example stopped!");
+		log.info("Locked Chunk Overlay stopped!");
 		lastTile = null;
 		overlayManager.remove(forbiddenTileOverlay);
+		forbiddenTileOverlay.setTiles(Collections.emptySet());
 	}
 
 private void printForbidden(String dir, WorldPoint wp)
@@ -126,6 +128,57 @@ private boolean isWithinMainland(WorldPoint wp)
     int x = wp.getX();
     int y = wp.getY();
     return x >= 1024 && x <= 3967 && y >= 2496 && y <= 4159;
+}
+
+private void updateForbiddenRegionsFromLoadedRegions()
+{
+	int[] regions = client.getMapRegions();
+	if (regions == null)
+	{
+		forbiddenTileOverlay.setTiles(Collections.emptySet());
+		return;
+	}
+
+	Player lp = client.getLocalPlayer();
+	WorldPoint wp = lp != null ? lp.getWorldLocation() : null;
+	if (wp == null)
+	{
+		forbiddenTileOverlay.setTiles(Collections.emptySet());
+		return;
+	}
+
+	// Outside mainland: treat all permitted
+	if (!isWithinMainland(wp))
+	{
+		forbiddenTileOverlay.setTiles(Collections.emptySet());
+		return;
+	}
+
+	String csv = configManager.getConfiguration("regionlocker", "unlockedRegions");
+	List<String> unlocked = (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
+	boolean hasList = !unlocked.isEmpty();
+
+	Set<WorldPoint> tiles = new HashSet<>();
+	int plane = client.getPlane();
+	for (int rid : regions)
+	{
+		boolean permitted = !hasList || unlocked.contains(Integer.toString(rid));
+		if (!permitted)
+		{
+			addRegionTiles(tiles, rid, plane);
+		}
+	}
+
+	forbiddenTileOverlay.setTiles(tiles);
+}
+
+@Subscribe
+public void onGameStateChanged(GameStateChanged gameStateChanged)
+{
+	if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
+	{
+		updateForbiddenRegionsFromLoadedRegions();
+	}
 }
 
 private void addRectTiles(Set<WorldPoint> out, WorldPoint start, int dx, int dy, int length, int width)
@@ -203,6 +256,13 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
 			return;
 		}
 
+        long now = System.currentTimeMillis();
+        if (now - lastRegionsRefreshMs >= 10000L)
+        {
+            updateForbiddenRegionsFromLoadedRegions();
+            lastRegionsRefreshMs = now;
+        }
+
 		int regionId = worldPoint.getRegionID();
 		String csv = configManager.getConfiguration("regionlocker", "unlockedRegions");
 		List<String> unlocked = (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
@@ -214,70 +274,7 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
             isUnlocked = true;
         }
 
-		// On movement, print only forbidden tiles with direction; and shade the nearest forbidden per ray
-		if (lastTile == null || !lastTile.equals(worldPoint))
-		{
-			Set<WorldPoint> forbidden = new HashSet<>();
-			int px = worldPoint.getX();
-			int py = worldPoint.getY();
-			int pl = worldPoint.getPlane();
-
-			WorldPoint here = nearestForbiddenWithin5(px, py, pl, 0, 0, hasList, unlocked);
-			WorldPoint north = nearestForbiddenWithin5(px, py, pl, 0, +1, hasList, unlocked);
-			WorldPoint south = nearestForbiddenWithin5(px, py, pl, 0, -1, hasList, unlocked);
-			WorldPoint east = nearestForbiddenWithin5(px, py, pl, +1, 0, hasList, unlocked);
-			WorldPoint west = nearestForbiddenWithin5(px, py, pl, -1, 0, hasList, unlocked);
-			WorldPoint northeast = nearestForbiddenWithin5(px, py, pl, +1, +1, hasList, unlocked);
-			WorldPoint northwest = nearestForbiddenWithin5(px, py, pl, -1, +1, hasList, unlocked);
-			WorldPoint southeast = nearestForbiddenWithin5(px, py, pl, +1, -1, hasList, unlocked);
-			WorldPoint southwest = nearestForbiddenWithin5(px, py, pl, -1, -1, hasList, unlocked);
-
-			if (here != null) { printForbidden("HERE", here); addRegionTiles(forbidden, here.getRegionID(), here.getPlane()); }
-            if (north != null)
-			{
-				printForbidden("NORTH", north);
-                addRegionTiles(forbidden, north.getRegionID(), north.getPlane());
-			}
-            if (south != null)
-			{
-				printForbidden("SOUTH", south);
-                addRegionTiles(forbidden, south.getRegionID(), south.getPlane());
-			}
-            if (east != null)
-			{
-				printForbidden("EAST", east);
-                addRegionTiles(forbidden, east.getRegionID(), east.getPlane());
-			}
-            if (west != null)
-			{
-				printForbidden("WEST", west);
-                addRegionTiles(forbidden, west.getRegionID(), west.getPlane());
-			}
-
-			if (northeast != null)
-			{
-				printForbidden("NORTHEAST", northeast);
-				addRegionTiles(forbidden, northeast.getRegionID(), northeast.getPlane());
-			}
-			if (northwest != null)
-			{
-				printForbidden("NORTHWEST", northwest);
-				addRegionTiles(forbidden, northwest.getRegionID(), northwest.getPlane());
-			}
-			if (southeast != null)
-			{
-				printForbidden("SOUTHEAST", southeast);
-				addRegionTiles(forbidden, southeast.getRegionID(), southeast.getPlane());
-			}
-			if (southwest != null)
-			{
-				printForbidden("SOUTHWEST", southwest);
-				addRegionTiles(forbidden, southwest.getRegionID(), southwest.getPlane());
-			}
-
-			forbiddenTileOverlay.setTiles(forbidden);
-			lastTile = worldPoint;
-		}
+		// Movement-based shading removed; handled on GameStateChanged via loaded regions
 
 		if (lastRegionId == null || !lastRegionId.equals(regionId))
 		{
@@ -285,7 +282,6 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
 			lastRegionId = regionId;
 		}
 
-		long now = System.currentTimeMillis();
 		if (!isUnlocked)
 		{
 			if (!inLockedRegion)
@@ -357,8 +353,8 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
 	}
 
 	@Provides
-	ExampleConfig provideConfig(ConfigManager configManager)
+    LockedChunkOverlayConfig provideConfig(ConfigManager configManager)
 	{
-		return configManager.getConfig(ExampleConfig.class);
+		return configManager.getConfig(LockedChunkOverlayConfig.class);
 	}
 }
