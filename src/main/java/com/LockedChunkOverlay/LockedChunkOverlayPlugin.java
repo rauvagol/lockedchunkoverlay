@@ -14,6 +14,7 @@ import net.runelite.api.SoundEffectID;
 import net.runelite.api.SoundEffectVolume;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.util.Text;
@@ -83,13 +84,32 @@ private void printForbidden(String dir, WorldPoint wp)
     int baseY = (rid & 255) << 6; // southwest corner y
     int maxX = baseX + 63;
     int maxY = baseY + 63;
-    client.addChatMessage(
-        ChatMessageType.GAMEMESSAGE,
-        "",
-        dir + ": (" + wp.getX() + "," + wp.getY() + "," + wp.getPlane() + ") regionId=" + rid +
-            " permitted=false border=(" + baseX + "," + baseY + ")-(" + maxX + "," + maxY + ")",
-        null
-    );
+    if (config.debugText())
+    {
+        client.addChatMessage(
+            ChatMessageType.GAMEMESSAGE,
+            "",
+            dir + ": (" + wp.getX() + "," + wp.getY() + "," + wp.getPlane() + ") regionId=" + rid +
+                " permitted=false border=(" + baseX + "," + baseY + ")-(" + maxX + "," + maxY + ")",
+            null
+        );
+    }
+}
+
+@Subscribe
+public void onConfigChanged(ConfigChanged event)
+{
+    if (!"LockedChunkOverlay".equals(event.getGroup()))
+    {
+        return;
+    }
+    if ("screenFade".equals(event.getKey()) && !config.screenFade())
+    {
+        // Immediately remove any blackout overlay when darken screen is turned off
+        overlayManager.remove(blackoutOverlay);
+        // Also reset countdown overlay state
+        blackoutOverlay.setState(0, false);
+    }
 }
 
 private void addLocalInstance(Set<WorldPoint> out, WorldPoint wp)
@@ -278,7 +298,10 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
 
 		if (lastRegionId == null || !lastRegionId.equals(regionId))
 		{
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "regionId=" + regionId + " unlocked=" + isUnlocked, null);
+            if (config.debugText())
+            {
+                client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "regionId=" + regionId + " unlocked=" + isUnlocked, null);
+            }
 			lastRegionId = regionId;
 		}
 
@@ -295,13 +318,24 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
 			long elapsedSec = Math.max(0L, (now - lockedEnterMs) / 1000L);
 			int remainingSec = (int) Math.max(0L, 5L - elapsedSec);
 			// Update blackout fade level each tick: 0s -> 255 alpha, 5s -> ~51 alpha
-			int alpha = (int)Math.max(0, Math.min(255, (5 - remainingSec) * (255 / 5.0)));
-			if (lastRemainingSec == -1 && remainingSec > 0)
-			{
-				// First entry into locked region: add overlay and start faded
-				overlayManager.add(blackoutOverlay);
-			}
-			blackoutOverlay.setState(alpha, false);
+            int alpha = (int)Math.max(0, Math.min(255, (5 - remainingSec) * (255 / 5.0)));
+            if (config.screenFade() && !config.opaqueAfterFive())
+            {
+                int cap = (int)(255 * 0.8);
+                if (alpha > cap)
+                {
+                    alpha = cap;
+                }
+            }
+            if (config.screenFade())
+            {
+                if (lastRemainingSec == -1 && remainingSec > 0)
+                {
+                    // First entry into locked region: add overlay and start faded
+                    overlayManager.add(blackoutOverlay);
+                }
+                blackoutOverlay.setState(alpha, false);
+            }
 			if (remainingSec != lastRemainingSec)
 			{
 				int volume;
@@ -319,32 +353,50 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
 					default: // 2, 1, 0
 						volume = SoundEffectVolume.HIGH;
 				}
-				if (remainingSec > 0)
-				{
-					client.playSoundEffect(3482, volume);
-				}
-				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "You arent supposed to be here, you will perish in " + remainingSec + " seconds.", null);
+                if (remainingSec > 0 && config.fadeWarningSound())
+                {
+                    client.playSoundEffect(3482, volume);
+                }
+                if (config.screenFade() || config.fadeWarningSound())
+                {
+                    client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "You arent supposed to be here, you will perish in " + remainingSec + " seconds.", null);
+                }
 				// Crossed a boundary; update last seen
 				lastRemainingSec = remainingSec;
 			}
 
-			// While at 0 or below, continuously show opaque blackout and repeat grue warning each second
+            // While at 0 or below, handle overlay and grue warning
 			if (remainingSec <= 0)
 			{
-				overlayManager.add(blackoutOverlay);
-				blackoutOverlay.setState(255, true);
-				if (now - lastGrueMs >= 200L)
+                if (config.screenFade())
+                {
+                    overlayManager.add(blackoutOverlay);
+                    int finalAlpha = config.opaqueAfterFive() ? 255 : (int)(255 * 0.8);
+                    blackoutOverlay.setState(finalAlpha, config.opaqueAfterFive());
+                }
+                if (config.fadeWarningSound() && (now - lastGrueMs >= 200L))
 				{
 					client.playSoundEffect(3485, SoundEffectVolume.HIGH);
-					client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "You have been eaten by a grue.", null);
+                    if (config.screenFade() || config.fadeWarningSound())
+                    {
+                        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "You have been eaten by a grue.", null);
+                    }
 					lastGrueMs = now;
 				}
+                else if ((now - lastGrueMs >= 200L))
+                {
+                    // Keep lastGrueMs advancing to avoid rapid loop if sound disabled
+                    lastGrueMs = now;
+                }
 			}
 		}
 		else if (inLockedRegion)
 		{
 			long durationSec = Math.max(0L, (now - lockedEnterMs) / 1000L);
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Time in locked region: " + durationSec + "s", null);
+            if (config.debugText())
+            {
+                client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Time in locked region: " + durationSec + "s", null);
+            }
 			inLockedRegion = false;
 			lastRemainingSec = -1;
 			overlayManager.remove(blackoutOverlay);
