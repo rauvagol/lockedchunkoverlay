@@ -6,6 +6,8 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPriority;
+import net.runelite.client.ui.overlay.OverlayPosition;
+import net.runelite.client.ui.overlay.OverlayUtil;
 import net.runelite.api.Perspective;
 
 import javax.inject.Inject;
@@ -26,8 +28,9 @@ class ForbiddenTileOverlay extends Overlay
 	ForbiddenTileOverlay(Client client)
 	{
 		this.client = client;
+		setPosition(OverlayPosition.DYNAMIC);
 		setLayer(OverlayLayer.ABOVE_SCENE);
-		setPriority(OverlayPriority.HIGHEST);
+		setPriority(OverlayPriority.LOW);
 	}
 
 	void setTiles(Set<WorldPoint> worldPoints)
@@ -49,7 +52,7 @@ class ForbiddenTileOverlay extends Overlay
 
         final int plane = client.getPlane();
         final Color prev = graphics.getColor();
-        graphics.setColor(new Color(0, 0, 0, 180));
+        final Color fill = new Color(0, 0, 0, 180);
 
         for (WorldPoint wp : tiles)
         {
@@ -65,6 +68,7 @@ class ForbiddenTileOverlay extends Overlay
             Polygon poly = Perspective.getCanvasTilePoly(client, lp);
             if (poly != null)
             {
+                graphics.setColor(fill);
                 graphics.fillPolygon(poly);
             }
         }
