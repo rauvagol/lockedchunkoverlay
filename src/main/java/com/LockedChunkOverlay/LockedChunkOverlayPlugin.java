@@ -20,7 +20,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.util.Text;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.api.events.WidgetClosed;
-import net.runelite.api.widgets.WidgetID;
+import net.runelite.api.gameval.InterfaceID;
 
 import java.util.Collections;
 import java.util.List;
@@ -101,7 +101,7 @@ private void printForbidden(String dir, WorldPoint wp)
 @Subscribe
 public void onWidgetClosed(WidgetClosed event)
 {
-    if (event.getGroupId() == WidgetID.WORLD_MAP_GROUP_ID)
+    if (event.getGroupId() == InterfaceID.Worldmap.UNIVERSE) //not sure if this even does anything? but cant hurt
     {
         updateForbiddenRegionsFromLoadedRegions();
     }
