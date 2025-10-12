@@ -131,13 +131,13 @@ public void onConfigChanged(ConfigChanged event)
         // Also reset countdown overlay state
         blackoutOverlay.setState(0, false);
     }
-		// Refresh regions when manual list toggled/edited
-		if ("useManualChunks".equals(event.getKey()) || "manualChunksCsv".equals(event.getKey()))
+		// Refresh when dropdown or manual CSV changes
+		if ("allowedChunksSource".equals(event.getKey()) || "manualChunksCsv".equals(event.getKey()))
 		{
 			updateForbiddenRegionsFromLoadedRegions();
 		}
-		// Refresh and clear cache on chunkpicker changes
-		if ("chunkpickerAutoFetch".equals(event.getKey()) || "chunkpickerMapCode".equals(event.getKey()))
+		// Clear Chunk Picker cache and refresh when source/map code changes
+		if ("allowedChunksSource".equals(event.getKey()) || "chunkpickerMapCode".equals(event.getKey()))
 		{
 			chunkpickerUnlocked = Collections.emptyList();
 			updateForbiddenRegionsFromLoadedRegions();
@@ -204,29 +204,24 @@ private void addLocalInstance(Set<WorldPoint> out, WorldPoint wp)
 
 	private List<String> resolveUnlockedRegions()
 	{
-		// Priority: 1) Chunk Picker (when enabled and cache available)
-		if (config.chunkpickerAutoFetch())
+		AllowedChunksSource source = config.allowedChunksSource();
+		switch (source)
 		{
-			String code = config.chunkpickerMapCode();
-			if (code != null && !code.isBlank())
+			case CHUNK_PICKER_SITE:
+				return (chunkpickerUnlocked == null || chunkpickerUnlocked.isEmpty())
+					? Collections.emptyList() : chunkpickerUnlocked;
+			case MANUAL_INPUT:
 			{
-				if (chunkpickerUnlocked != null && !chunkpickerUnlocked.isEmpty())
-				{
-					return chunkpickerUnlocked;
-				}
+				String csv = config.manualChunksCsv();
+				return (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
+			}
+			case REGION_LOCKER:
+			default:
+			{
+				String csv = configManager.getConfiguration("regionlocker", "unlockedRegions");
+				return (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
 			}
 		}
-
-		// 2) Manual CSV
-		if (config.useManualChunks())
-		{
-			String csv = config.manualChunksCsv();
-			return (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
-		}
-
-		// 3) Region Locker config
-		String csv = configManager.getConfiguration("regionlocker", "unlockedRegions");
-		return (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
 	}
 
 private WorldPoint nearestForbiddenWithin5(int px, int py, int pl, int dx, int dy, boolean hasList, List<String> unlocked)
@@ -388,8 +383,8 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
             lastRegionsRefreshMs = now;
         }
 
-        // Fetch from Chunk Picker every 10s when enabled and map code present
-        if (config.chunkpickerAutoFetch() && now - lastChunkpickerFetchMs >= 10000L)
+        // Fetch from Chunk Picker every 10s when selected and map code present
+        if (config.allowedChunksSource() == AllowedChunksSource.CHUNK_PICKER_SITE && now - lastChunkpickerFetchMs >= 10000L)
         {
             String code = config.chunkpickerMapCode();
             if (code != null && !code.isBlank())

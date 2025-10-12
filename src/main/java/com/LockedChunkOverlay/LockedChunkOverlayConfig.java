@@ -73,16 +73,16 @@ public interface LockedChunkOverlayConfig extends Config
 		return false;
 	}
 
-	@ConfigItem(
-		keyName = "useManualChunks",
-		name = "Use manual enabled chunks",
-		description = "Enable manual list of allowed chunk region IDs (CSV)",
-		position = 6
-	)
-	default boolean useManualChunks()
-	{
-		return false;
-	}
+    @ConfigItem(
+        keyName = "allowedChunksSource",
+        name = "Chunk Source",
+        description = "Where to read allowed chunks from",
+        position = 6
+    )
+    default AllowedChunksSource allowedChunksSource()
+    {
+        return AllowedChunksSource.REGION_LOCKER;
+    }
 
 	@ConfigItem(
 		keyName = "manualChunksCsv",
@@ -106,14 +106,5 @@ public interface LockedChunkOverlayConfig extends Config
 		return "";
 	}
 
-	@ConfigItem(
-		keyName = "chunkpickerAutoFetch",
-		name = "Auto-fetch from Chunk Picker",
-		description = "Every 10s, fetch unlocked chunks for the map code",
-		position = 9
-	)
-	default boolean chunkpickerAutoFetch()
-	{
-		return false;
-	}
+    // No toggle; fetching is controlled by dropdown selection
 }
