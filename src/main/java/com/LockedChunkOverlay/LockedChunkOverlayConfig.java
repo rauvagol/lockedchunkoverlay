@@ -94,4 +94,26 @@ public interface LockedChunkOverlayConfig extends Config
 	{
 		return "";
 	}
+
+	@ConfigItem(
+		keyName = "chunkpickerMapCode",
+		name = "Chunk Picker map code",
+		description = "Map code used by Chunk Picker",
+		position = 8
+	)
+	default String chunkpickerMapCode()
+	{
+		return "";
+	}
+
+	@ConfigItem(
+		keyName = "chunkpickerAutoFetch",
+		name = "Auto-fetch from Chunk Picker",
+		description = "Every 10s, fetch unlocked chunks for the map code",
+		position = 9
+	)
+	default boolean chunkpickerAutoFetch()
+	{
+		return false;
+	}
 }

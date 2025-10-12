@@ -22,10 +22,18 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.gameval.InterfaceID;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @PluginDescriptor(
@@ -62,6 +70,8 @@ public class LockedChunkOverlayPlugin extends Plugin
 	private static final int RECT_LENGTH = 101; // tiles, along the direction
 	private static final int WARNING_DISTANCE = 20; // tiles, warning distance from forbidden chunk border
     private long lastRegionsRefreshMs;
+	private long lastChunkpickerFetchMs;
+	private List<String> chunkpickerUnlocked = Collections.emptyList();
 
 	@Override
 	protected void startUp() throws Exception
@@ -126,6 +136,12 @@ public void onConfigChanged(ConfigChanged event)
 		{
 			updateForbiddenRegionsFromLoadedRegions();
 		}
+		// Refresh and clear cache on chunkpicker changes
+		if ("chunkpickerAutoFetch".equals(event.getKey()) || "chunkpickerMapCode".equals(event.getKey()))
+		{
+			chunkpickerUnlocked = Collections.emptyList();
+			updateForbiddenRegionsFromLoadedRegions();
+		}
 }
 
 private void addLocalInstance(Set<WorldPoint> out, WorldPoint wp)
@@ -138,6 +154,80 @@ private void addLocalInstance(Set<WorldPoint> out, WorldPoint wp)
 	}
 	out.addAll(locals);
 }
+
+	private String fetchChunkpickerUnlocked(String mapCode)
+	{
+		try
+		{
+			String url = "https://chunkpicker.firebaseio.com/maps/" + mapCode + "/chunks/unlocked.json";
+			HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+			connection.setRequestMethod("GET");
+			connection.setConnectTimeout(3000);
+			connection.setReadTimeout(3000);
+			int status = connection.getResponseCode();
+			try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+					status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream(),
+					StandardCharsets.UTF_8)))
+			{
+				StringBuilder sb = new StringBuilder();
+				String line;
+				while ((line = reader.readLine()) != null)
+				{
+					sb.append(line);
+				}
+				return sb.toString();
+			}
+		}
+		catch (Exception e)
+		{
+			log.warn("Chunkpicker fetch failed", e);
+			return null;
+		}
+	}
+
+    private static final Pattern JSON_KEY_PATTERN = Pattern.compile("\"(\\d{1,6})\"\\s*:\\s*\"\\d{1,6}\"");
+
+	private static List<String> parseChunkpickerKeys(String json)
+	{
+		if (json == null || json.isEmpty())
+		{
+			return Collections.emptyList();
+		}
+		List<String> out = new ArrayList<>();
+		Matcher m = JSON_KEY_PATTERN.matcher(json);
+		while (m.find())
+		{
+			out.add(m.group(1));
+		}
+		return out;
+	}
+
+	private List<String> resolveUnlockedRegions()
+	{
+		// Priority: 1) Chunk Picker (when enabled and cache available)
+		if (config.chunkpickerAutoFetch())
+		{
+			String code = config.chunkpickerMapCode();
+			if (code != null && !code.isBlank())
+			{
+				if (chunkpickerUnlocked != null && !chunkpickerUnlocked.isEmpty())
+				{
+					return chunkpickerUnlocked;
+				}
+			}
+		}
+
+		// 2) Manual CSV
+		if (config.useManualChunks())
+		{
+			String csv = config.manualChunksCsv();
+			return (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
+		}
+
+		// 3) Region Locker config
+		String csv = configManager.getConfiguration("regionlocker", "unlockedRegions");
+		return (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
+	}
 
 private WorldPoint nearestForbiddenWithin5(int px, int py, int pl, int dx, int dy, boolean hasList, List<String> unlocked)
 {
@@ -190,17 +280,7 @@ private void updateForbiddenRegionsFromLoadedRegions()
 		return;
 	}
 
-	// Choose source of unlocked regions: manual config when enabled, else Region Locker config
-	String csv;
-	if (config.useManualChunks())
-	{
-		csv = config.manualChunksCsv();
-	}
-	else
-	{
-		csv = configManager.getConfiguration("regionlocker", "unlockedRegions");
-	}
-	List<String> unlocked = (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
+	List<String> unlocked = resolveUnlockedRegions();
 	boolean hasList = !unlocked.isEmpty();
 
 	Set<WorldPoint> tiles = new HashSet<>();
@@ -308,18 +388,25 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
             lastRegionsRefreshMs = now;
         }
 
+        // Fetch from Chunk Picker every 10s when enabled and map code present
+        if (config.chunkpickerAutoFetch() && now - lastChunkpickerFetchMs >= 10000L)
+        {
+            String code = config.chunkpickerMapCode();
+            if (code != null && !code.isBlank())
+            {
+                String body = fetchChunkpickerUnlocked(code.trim());
+                if (body != null && !body.isEmpty())
+                {
+                    // Update cache and refresh overlays
+                    chunkpickerUnlocked = parseChunkpickerKeys(body);
+                    updateForbiddenRegionsFromLoadedRegions();
+                }
+            }
+            lastChunkpickerFetchMs = now;
+        }
+
 	int regionId = worldPoint.getRegionID();
-	// Choose source of unlocked regions: manual config when enabled, else Region Locker config
-	String csv;
-	if (config.useManualChunks())
-	{
-		csv = config.manualChunksCsv();
-	}
-	else
-	{
-		csv = configManager.getConfiguration("regionlocker", "unlockedRegions");
-	}
-	List<String> unlocked = (csv == null || csv.isEmpty()) ? Collections.emptyList() : Text.fromCSV(csv);
+	List<String> unlocked = resolveUnlockedRegions();
         boolean hasList = unlocked != null && !unlocked.isEmpty();
         boolean isUnlocked = !hasList || unlocked.contains(Integer.toString(regionId));
         if (!isWithinMainland(worldPoint))
