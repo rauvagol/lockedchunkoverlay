@@ -77,11 +77,12 @@ public interface LockedChunkOverlayConfig extends Config
         keyName = "allowedChunksSource",
         name = "Chunk Source",
         description = "Where to read allowed chunks from",
+        warning = "If you select the chunk picker site, the plugin will make network requests and transmit your IP address to a 3rd-party server not controlled or verified by RuneLite developers.",
         position = 6
     )
     default AllowedChunksSource allowedChunksSource()
     {
-        return AllowedChunksSource.REGION_LOCKER;
+        return AllowedChunksSource.MANUAL_INPUT;
     }
 
 	@ConfigItem(
