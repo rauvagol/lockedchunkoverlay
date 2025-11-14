@@ -25,7 +25,6 @@ import net.runelite.api.gameval.InterfaceID;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
-import java.util.concurrent.TimeUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -58,6 +57,9 @@ public class LockedChunkOverlayPlugin extends Plugin
 	@Inject
 	private ForbiddenTileOverlay forbiddenTileOverlay;
 
+	@Inject
+	private OkHttpClient okHttpClient;
+
 	private Integer lastRegionId;
 
 	private boolean inLockedRegion;
@@ -71,10 +73,6 @@ public class LockedChunkOverlayPlugin extends Plugin
     private long lastRegionsRefreshMs;
 	private long lastChunkpickerFetchMs;
 	private List<String> chunkpickerUnlocked = Collections.emptyList();
-	private final OkHttpClient httpClient = new OkHttpClient.Builder()
-		.connectTimeout(3, TimeUnit.SECONDS)
-		.readTimeout(3, TimeUnit.SECONDS)
-		.build();
 
 	@Override
 	protected void startUp() throws Exception
@@ -168,7 +166,7 @@ private void addLocalInstance(Set<WorldPoint> out, WorldPoint wp)
 				.get()
 				.build();
 			
-			try (Response response = httpClient.newCall(request).execute())
+			try (Response response = okHttpClient.newCall(request).execute())
 			{
 				if (response.isSuccessful() && response.body() != null)
 				{
