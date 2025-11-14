@@ -22,11 +22,10 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.gameval.InterfaceID;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import java.util.concurrent.TimeUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -72,6 +71,10 @@ public class LockedChunkOverlayPlugin extends Plugin
     private long lastRegionsRefreshMs;
 	private long lastChunkpickerFetchMs;
 	private List<String> chunkpickerUnlocked = Collections.emptyList();
+	private final OkHttpClient httpClient = new OkHttpClient.Builder()
+		.connectTimeout(3, TimeUnit.SECONDS)
+		.readTimeout(3, TimeUnit.SECONDS)
+		.build();
 
 	@Override
 	protected void startUp() throws Exception
@@ -136,8 +139,8 @@ public void onConfigChanged(ConfigChanged event)
 		{
 			updateForbiddenRegionsFromLoadedRegions();
 		}
-		// Clear Chunk Picker cache and refresh when source/map code changes
-		if ("allowedChunksSource".equals(event.getKey()) || "chunkpickerMapCode".equals(event.getKey()))
+		// Clear Chunk Picker cache and refresh when source/map code/site access changes
+		if ("allowedChunksSource".equals(event.getKey()) || "chunkpickerMapCode".equals(event.getKey()) || "enableSiteAccess".equals(event.getKey()))
 		{
 			chunkpickerUnlocked = Collections.emptyList();
 			updateForbiddenRegionsFromLoadedRegions();
@@ -160,22 +163,18 @@ private void addLocalInstance(Set<WorldPoint> out, WorldPoint wp)
 		try
 		{
 			String url = "https://chunkpicker.firebaseio.com/maps/" + mapCode + "/chunks/unlocked.json";
-			HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-			connection.setRequestMethod("GET");
-			connection.setConnectTimeout(3000);
-			connection.setReadTimeout(3000);
-			int status = connection.getResponseCode();
-			try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-					status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream(),
-					StandardCharsets.UTF_8)))
+			Request request = new Request.Builder()
+				.url(url)
+				.get()
+				.build();
+			
+			try (Response response = httpClient.newCall(request).execute())
 			{
-				StringBuilder sb = new StringBuilder();
-				String line;
-				while ((line = reader.readLine()) != null)
+				if (response.isSuccessful() && response.body() != null)
 				{
-					sb.append(line);
+					return response.body().string();
 				}
-				return sb.toString();
+				return null;
 			}
 		}
 		catch (Exception e)
@@ -208,6 +207,11 @@ private void addLocalInstance(Set<WorldPoint> out, WorldPoint wp)
 		switch (source)
 		{
 			case CHUNK_PICKER_SITE:
+				// Only return cached data if site access is enabled
+				if (!config.enableSiteAccess())
+				{
+					return Collections.emptyList();
+				}
 				return (chunkpickerUnlocked == null || chunkpickerUnlocked.isEmpty())
 					? Collections.emptyList() : chunkpickerUnlocked;
 			case MANUAL_INPUT:
@@ -383,8 +387,10 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
             lastRegionsRefreshMs = now;
         }
 
-        // Fetch from Chunk Picker every 10s when selected and map code present
-        if (config.allowedChunksSource() == AllowedChunksSource.CHUNK_PICKER_SITE && now - lastChunkpickerFetchMs >= 10000L)
+        // Fetch from Chunk Picker every 10s when selected, site access enabled, and map code present
+        if (config.allowedChunksSource() == AllowedChunksSource.CHUNK_PICKER_SITE 
+            && config.enableSiteAccess() 
+            && now - lastChunkpickerFetchMs >= 10000L)
         {
             String code = config.chunkpickerMapCode();
             if (code != null && !code.isBlank())

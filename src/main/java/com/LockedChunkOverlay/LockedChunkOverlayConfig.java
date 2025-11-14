@@ -77,7 +77,6 @@ public interface LockedChunkOverlayConfig extends Config
         keyName = "allowedChunksSource",
         name = "Chunk Source",
         description = "Where to read allowed chunks from",
-        warning = "If you select the chunk picker site, the plugin will make network requests and transmit your IP address to a 3rd-party server not controlled or verified by RuneLite developers.",
         position = 6
     )
     default AllowedChunksSource allowedChunksSource()
@@ -86,10 +85,22 @@ public interface LockedChunkOverlayConfig extends Config
     }
 
 	@ConfigItem(
+		keyName = "enableSiteAccess",
+		name = "Enable site access",
+		description = "Allow the plugin to make network requests to fetch chunk data from external servers",
+		warning = "If you enable this, the plugin will make network requests and transmit your IP address to a 3rd-party server not controlled or verified by RuneLite developers.",
+		position = 7
+	)
+	default boolean enableSiteAccess()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = "manualChunksCsv",
 		name = "Manual chunk IDs (comma separated)",
 		description = "Manually specified allowed chunks",
-		position = 7
+		position = 8
 	)
 	default String manualChunksCsv()
 	{
@@ -100,7 +111,7 @@ public interface LockedChunkOverlayConfig extends Config
 		keyName = "chunkpickerMapCode",
 		name = "Chunk Picker map code",
 		description = "Map code used by Chunk Picker",
-		position = 8
+		position = 9
 	)
 	default String chunkpickerMapCode()
 	{
