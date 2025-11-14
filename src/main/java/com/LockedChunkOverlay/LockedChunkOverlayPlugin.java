@@ -19,9 +19,11 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.util.Text;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.gameval.InterfaceID;
 
+import okhttp3.Callback;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -59,6 +61,9 @@ public class LockedChunkOverlayPlugin extends Plugin
 
 	@Inject
 	private OkHttpClient okHttpClient;
+
+	@Inject
+	private ClientThread clientThread;
 
 	private Integer lastRegionId;
 
@@ -156,30 +161,47 @@ private void addLocalInstance(Set<WorldPoint> out, WorldPoint wp)
 	out.addAll(locals);
 }
 
-	private String fetchChunkpickerUnlocked(String mapCode)
+	private void fetchChunkpickerUnlocked(String mapCode)
 	{
-		try
+		String url = "https://chunkpicker.firebaseio.com/maps/" + mapCode + "/chunks/unlocked.json";
+		Request request = new Request.Builder()
+			.url(url)
+			.get()
+			.build();
+		
+		okHttpClient.newCall(request).enqueue(new Callback()
 		{
-			String url = "https://chunkpicker.firebaseio.com/maps/" + mapCode + "/chunks/unlocked.json";
-			Request request = new Request.Builder()
-				.url(url)
-				.get()
-				.build();
-			
-			try (Response response = okHttpClient.newCall(request).execute())
+			@Override
+			public void onFailure(okhttp3.Call call, java.io.IOException e)
 			{
-				if (response.isSuccessful() && response.body() != null)
-				{
-					return response.body().string();
-				}
-				return null;
+				log.warn("Chunkpicker fetch failed", e);
 			}
-		}
-		catch (Exception e)
-		{
-			log.warn("Chunkpicker fetch failed", e);
-			return null;
-		}
+
+			@Override
+			public void onResponse(okhttp3.Call call, Response response)
+			{
+				try
+				{
+					if (response.isSuccessful() && response.body() != null)
+					{
+						String body = response.body().string();
+						if (body != null && !body.isEmpty())
+						{
+							// Update cache and refresh overlays on the client thread
+							clientThread.invokeLater(() ->
+							{
+								chunkpickerUnlocked = parseChunkpickerKeys(body);
+								updateForbiddenRegionsFromLoadedRegions();
+							});
+						}
+					}
+				}
+				catch (Exception e)
+				{
+					log.warn("Chunkpicker response parsing failed", e);
+				}
+			}
+		});
 	}
 
     private static final Pattern JSON_KEY_PATTERN = Pattern.compile("\"(\\d{1,6})\"\\s*:\\s*\"\\d{1,6}\"");
@@ -395,13 +417,7 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
             String code = config.chunkpickerMapCode();
             if (code != null && !code.isBlank())
             {
-                String body = fetchChunkpickerUnlocked(code.trim());
-                if (body != null && !body.isEmpty())
-                {
-                    // Update cache and refresh overlays
-                    chunkpickerUnlocked = parseChunkpickerKeys(body);
-                    updateForbiddenRegionsFromLoadedRegions();
-                }
+                fetchChunkpickerUnlocked(code.trim());
             }
             lastChunkpickerFetchMs = now;
         }
