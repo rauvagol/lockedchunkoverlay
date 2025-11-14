@@ -280,7 +280,9 @@ private void updateForbiddenRegionsFromLoadedRegions()
 	}
 
 	List<String> unlocked = resolveUnlockedRegions();
-	boolean hasList = !unlocked.isEmpty();
+	// If Chunk Picker Site is selected but site access is disabled, treat all chunks as forbidden
+	boolean hasList = !unlocked.isEmpty() || 
+		(config.allowedChunksSource() == AllowedChunksSource.CHUNK_PICKER_SITE && !config.enableSiteAccess());
 
 	Set<WorldPoint> tiles = new HashSet<>();
 	int plane = client.getPlane();
@@ -408,7 +410,9 @@ private void addRegionTiles(Set<WorldPoint> out, int regionId, int plane)
 
 	int regionId = worldPoint.getRegionID();
 	List<String> unlocked = resolveUnlockedRegions();
-        boolean hasList = unlocked != null && !unlocked.isEmpty();
+        // If Chunk Picker Site is selected but site access is disabled, treat all chunks as forbidden
+        boolean hasList = (unlocked != null && !unlocked.isEmpty()) || 
+		(config.allowedChunksSource() == AllowedChunksSource.CHUNK_PICKER_SITE && !config.enableSiteAccess());
         boolean isUnlocked = !hasList || unlocked.contains(Integer.toString(regionId));
         if (!isWithinMainland(worldPoint))
         {
